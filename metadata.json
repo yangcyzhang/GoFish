@@ -1,0 +1,6 @@
+{
+  "name": "GoFish",
+  "description": "专业级垂钓鱼类图鉴、智能识别、气象钓况分析与渔获日记记录，祝您天天爆护！",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
