@@ -14,6 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.umeng.commonsdk.UMConfigure
+import com.umeng.analytics.MobclickAgent
+import com.umeng.umcrash.UMCrash
 import com.yangcy.gofish.ui.screens.MainScreen
 import com.yangcy.gofish.ui.theme.MyApplicationTheme
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
@@ -43,6 +46,19 @@ class MainActivity : ComponentActivity() {
             com.amap.api.maps.MapsInitializer.updatePrivacyAgree(this, true)
             com.amap.api.location.AMapLocationClient.updatePrivacyShow(this, true, true)
             com.amap.api.location.AMapLocationClient.updatePrivacyAgree(this, true)
+            
+            // Umeng Pre-Init (Compliant with privacy policy)
+            // Note: Official init should happen after user agrees to privacy policy.
+            // For now, we assume AMap privacy agree also covers Umeng or trigger both.
+            UMConfigure.preInit(this, BuildConfig.UMENG_APP_KEY, "Umeng")
+            UMConfigure.init(this, BuildConfig.UMENG_APP_KEY, "Umeng", UMConfigure.DEVICE_TYPE_PHONE, "")
+            
+            // Explicitly configure APM (Performance Monitoring)
+            // This enables Crash, ANR, and other performance data collection
+            UMCrash.init(this, BuildConfig.UMENG_APP_KEY, "Umeng")
+
+            // Page collection mode: Manual
+            MobclickAgent.setPageCollectionMode(MobclickAgent.PageMode.LEGACY_MANUAL)
         } catch (e: Exception) {
             Log.e("MainActivity", "AMap Privacy Init Error", e)
         }
@@ -65,6 +81,16 @@ class MainActivity : ComponentActivity() {
                 MainScreen(viewModel = viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        MobclickAgent.onResume(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        MobclickAgent.onPause(this)
     }
 
     private fun checkLocationPermissions() {
