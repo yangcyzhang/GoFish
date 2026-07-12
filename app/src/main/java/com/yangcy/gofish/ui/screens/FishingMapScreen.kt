@@ -56,6 +56,8 @@ import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.maps.model.MyLocationStyle
 import com.yangcy.gofish.data.model.FishingSpot
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
+import com.yangcy.gofish.util.AnalyticsManager
+import com.umeng.analytics.MobclickAgent
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -434,6 +436,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                     }
                     
                     map.setOnMapLongClickListener { latLng ->
+                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_MAP_LONG_PRESS)
                         Toast.makeText(context, "已选定位置，请在底部确认标记", Toast.LENGTH_SHORT).show()
                         focusManager.clearFocus()
                         isSearchFocused = false
@@ -782,6 +785,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                             Button(
                                 onClick = { 
                                     if (isClickAllowed()) {
+                                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_LAUNCH_NAVI, mapOf("spot_name" to spot.name))
                                         launchAMapNavi(context, spot.latitude, spot.longitude)
                                     }
                                 }, 
@@ -840,7 +844,15 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                                             
                                             // Action Row for Spot
                                             Row {
-                                                IconButton(onClick = { showShareDialogSpot = spot }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
+                                                IconButton(
+                    onClick = { 
+                        if (isClickAllowed()) {
+                            AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_SHARE_SPOT, mapOf("name" to spot.name))
+                            showShareDialogSpot = spot 
+                        }
+                    }, 
+                    modifier = Modifier.size(24.dp)
+                ) { Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 IconButton(onClick = { 
                                                     if (isClickAllowed()) {
@@ -935,6 +947,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                     if (missingFields.isNotEmpty()) {
                         Toast.makeText(context, "请填写：${missingFields.joinToString("、")}", Toast.LENGTH_SHORT).show()
                     } else {
+                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_ADD_SPOT, mapOf("name" to finalName))
                         viewModel.addFishingSpot(FishingSpot(
                             name = finalName, 
                             address = spotAddress, 
@@ -968,6 +981,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                 Button(
                     onClick = {
                         spotToDelete?.let {
+                            AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_DELETE_SPOT, mapOf("name" to it.name))
                             viewModel.deleteFishingSpot(it)
                             if (selectedSpot?.id == it.id) selectedSpot = null
                         }
@@ -1041,6 +1055,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                 Button(onClick = {
                     val imported = parseShareCode(pastedText)
                     if (imported != null) {
+                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_IMPORT_SPOT)
                         viewModel.addFishingSpot(imported)
                         showImportDialog = false
                         Toast.makeText(context, "成功导入：${imported.name}", Toast.LENGTH_SHORT).show()

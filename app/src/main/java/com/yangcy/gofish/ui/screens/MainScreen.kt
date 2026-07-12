@@ -40,6 +40,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yangcy.gofish.data.model.Fish
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
+import com.yangcy.gofish.util.AnalyticsManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +61,13 @@ fun MainScreen(viewModel: FishViewModel) {
         if (selectedFish != null) {
             BackHandler {
                 selectedFish = null
+            }
+            // Track Fish Detail Page
+            DisposableEffect(selectedFish) {
+                AnalyticsManager.onPageStart("FishDetail_${selectedFish?.name ?: "Unknown"}")
+                onDispose {
+                    AnalyticsManager.onPageEnd("FishDetail_${selectedFish?.name ?: "Unknown"}")
+                }
             }
             FishDetailScreen(
                 fish = selectedFish!!,
@@ -130,6 +138,23 @@ fun MainScreen(viewModel: FishViewModel) {
                         }
                     }
 
+                    // Umeng Page Tracking (Tab-based)
+                    val context = LocalContext.current
+                    DisposableEffect(currentTab) {
+                        val pageName = when(currentTab) {
+                            0 -> "FishingMap"
+                            1 -> "FishCatalog"
+                            2 -> "CatchHistory"
+                            else -> "Unknown"
+                        }
+                        AnalyticsManager.onPageStart(pageName)
+                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_TAB_SWITCH, mapOf("tab_index" to currentTab))
+                        
+                        onDispose {
+                            AnalyticsManager.onPageEnd(pageName)
+                        }
+                    }
+
                     if (currentTab == 1) {
                         FishCatalogTab(
                             viewModel = viewModel,
@@ -155,6 +180,16 @@ fun MainScreen(viewModel: FishViewModel) {
         }
 
         // Splash Screen Overlay with fade-out animation
+        DisposableEffect(showSplash) {
+            if (showSplash) {
+                AnalyticsManager.onPageStart("Splash")
+            }
+            onDispose {
+                if (showSplash) {
+                    AnalyticsManager.onPageEnd("Splash")
+                }
+            }
+        }
         AnimatedVisibility(
             visible = showSplash,
             enter = fadeIn(),
@@ -276,8 +311,12 @@ fun MainScreen(viewModel: FishViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(bottom = 30.dp)
                     ) {
+                        val context = LocalContext.current
                         Button(
-                            onClick = { showSplash = false },
+                            onClick = { 
+                                AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_SPLASH_ENTER)
+                                showSplash = false 
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF00ADB5),
                                 contentColor = Color(0xFF071118)
@@ -503,6 +542,7 @@ fun FishCatalogTab(
 
             // Category filter chips
             val filters = listOf("全部", "本地热门", "路亚鱼种", "手竿鱼种", "保护物种")
+            val context = LocalContext.current
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
@@ -511,7 +551,10 @@ fun FishCatalogTab(
                     val isSelected = selectedFilter == filter
                     FilterChip(
                         selected = isSelected,
-                        onClick = { viewModel.updateFilter(filter) },
+                        onClick = { 
+                            AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_FISH_FILTER, mapOf("filter" to filter))
+                            viewModel.updateFilter(filter) 
+                        },
                         label = { Text(filter) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -569,8 +612,12 @@ fun FishCatalogTab(
 
 @Composable
 fun FishItemCard(fish: Fish, onClick: () -> Unit) {
+    val context = LocalContext.current
     Card(
-        onClick = onClick,
+        onClick = {
+            AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_FISH_DETAIL, mapOf("fish_name" to fish.name))
+            onClick()
+        },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

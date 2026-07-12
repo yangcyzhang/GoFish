@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.yangcy.gofish.data.model.CatchLog
 import com.yangcy.gofish.data.model.FishData
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
+import com.yangcy.gofish.util.AnalyticsManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -150,7 +152,11 @@ fun CatchHistoryTab(
                     .weight(1f)
             ) {
                 items(catches) { log ->
-                    CatchLogItem(log = log, onDelete = { viewModel.deleteCatchLog(log) })
+                    val context = LocalContext.current
+                    CatchLogItem(log = log, onDelete = { 
+                        AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_DELETE_CATCH)
+                        viewModel.deleteCatchLog(log) 
+                    })
                 }
             }
         }
@@ -290,8 +296,10 @@ fun AddCatchDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
+            val context = LocalContext.current
             Button(
                 onClick = {
+                    AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_ADD_CATCH)
                     val weight = weightInput.toDoubleOrNull() ?: 0.5
                     val length = lengthInput.toDoubleOrNull() ?: 20.0
                     viewModel.addCatchLog(
