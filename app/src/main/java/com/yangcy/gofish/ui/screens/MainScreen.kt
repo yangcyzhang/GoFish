@@ -18,6 +18,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Air
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.Thunderstorm
+import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.material.icons.outlined.WbCloudy
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +35,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -41,6 +49,17 @@ import coil.request.ImageRequest
 import com.yangcy.gofish.data.model.Fish
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
 import com.yangcy.gofish.util.AnalyticsManager
+
+private fun getWeatherIcon(condition: String): ImageVector {
+    return when {
+        condition.contains("晴") -> Icons.Outlined.WbSunny
+        condition.contains("雷") -> Icons.Outlined.Thunderstorm
+        condition.contains("雨") -> Icons.Outlined.WaterDrop
+        condition.contains("云") -> Icons.Outlined.WbCloudy
+        condition.contains("雾") -> Icons.Outlined.Cloud
+        else -> Icons.Outlined.Cloud
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -423,7 +442,11 @@ fun FishCatalogTab(
 
                     // Geographic Spot Selector Chip
                     Card(
-                        onClick = { viewModel.triggerPreciseLocation(context, updateSelectedLocation = true) },
+                        onClick = { 
+                            if (!isPositioning) {
+                                viewModel.triggerPreciseLocation(context, updateSelectedLocation = true)
+                            }
+                        },
                         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.2f)),
                         shape = RoundedCornerShape(16.dp)
                     ) {
@@ -468,27 +491,26 @@ fun FishCatalogTab(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = when {
-                                    weatherCond.contains("雨") -> Icons.Default.Warning
-                                    weatherCond.contains("晴") -> Icons.Default.Star
-                                    else -> Icons.Default.Info
-                                },
+                                imageVector = getWeatherIcon(weatherCond),
                                 contentDescription = null,
                                 tint = Color(0xFFF4A261),
                                 modifier = Modifier.size(28.dp)
                                     .padding(end = 6.dp)
                             )
-                            Column {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
-                                    text = "${selectedLocation.name} 钓况",
+                                    text = selectedLocation.name,
                                     fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.7f)
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "$weatherCond • $weatherTemp",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1
                                 )
                             }
                         }
@@ -541,7 +563,7 @@ fun FishCatalogTab(
             )
 
             // Category filter chips
-            val filters = listOf("全部", "本地热门", "路亚鱼种", "手竿鱼种", "保护物种")
+            val filters = listOf("全部", "路亚鱼种", "手竿鱼种", "海竿鱼种")
             val context = LocalContext.current
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -639,7 +661,7 @@ fun FishItemCard(fish: Fish, onClick: () -> Unit) {
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(fish.imageUrl)
+                        .data(fish.imageResId) // 使用本地资源 ID
                         .crossfade(true)
                         .build(),
                     contentDescription = fish.name,
@@ -653,26 +675,6 @@ fun FishItemCard(fish: Fish, onClick: () -> Unit) {
                     // Draw soft waves and bubble decoration if load fails or image is empty
                     drawCircle(Color(0x330F4C5C), radius = 30f, center = Offset(size.width * 0.3f, size.height * 0.7f))
                     drawCircle(Color(0x220F4C5C), radius = 15f, center = Offset(size.width * 0.7f, size.height * 0.3f))
-                }
-
-                // Small protection indicator tag over the image
-                if (fish.isProtected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .background(
-                                color = if (fish.protectionLevel.contains("一级")) Color(0xFFE63946) else Color(0xFFF4A261),
-                                shape = RoundedCornerShape(bottomEnd = 8.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = if (fish.protectionLevel.contains("一级")) "一级" else "二级",
-                            color = Color.White,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             }
 
@@ -694,16 +696,28 @@ fun FishItemCard(fish: Fish, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    // Small category tag (Lure vs Hand)
-                    val isLure = fish.anglingStrategy.contains("路亚")
+                    // Small category tag
+                    val categoryColor = when (fish.category) {
+                        "路亚" -> Color(0xFFE25822)
+                        "手竿" -> Color(0xFF4F772D)
+                        "海竿" -> Color(0xFF3A86C8)
+                        else -> MaterialTheme.colorScheme.secondary
+                    }
+                    val categoryBg = when (fish.category) {
+                        "路亚" -> Color(0xFFFCEADE)
+                        "手竿" -> Color(0xFFE8F0E2)
+                        "海竿" -> Color(0xFFE3F2FD)
+                        else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
+                    }
+
                     Text(
-                        text = if (isLure) "路亚" else "手竿",
-                        color = if (isLure) Color(0xFFE25822) else Color(0xFF4F772D),
+                        text = fish.category,
+                        color = categoryColor,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .background(
-                                color = if (isLure) Color(0xFFFCEADE) else Color(0xFFE8F0E2),
+                                color = categoryBg,
                                 shape = RoundedCornerShape(4.dp)
                             )
                             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -733,31 +747,14 @@ fun FishItemCard(fish: Fish, onClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Conservation Icon tag
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (fish.isProtected) Icons.Default.Warning else Icons.Default.Check,
-                            contentDescription = null,
-                            tint = if (fish.isProtected) Color(0xFFE63946) else Color(0xFF2A9D8F),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(
-                            text = fish.protectionLevel.substringBefore(" "),
-                            fontSize = 10.sp,
-                            color = if (fish.isProtected) Color(0xFFE63946) else Color(0xFF2A9D8F),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
                     // Habitat indicator
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF3A86C8), modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                            text = if (fish.habitat.contains("底")) "中底栖" else "中上层",
+                            text = fish.habitat,
                             fontSize = 10.sp,
-                            color = Color(0xFF3A86C8)
+                            color = Color(0xFF3A86C8),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

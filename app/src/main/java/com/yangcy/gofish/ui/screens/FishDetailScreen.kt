@@ -9,6 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.Thunderstorm
+import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.material.icons.outlined.WbCloudy
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +33,17 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yangcy.gofish.data.model.Fish
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
+
+private fun getWeatherIcon(condition: String): ImageVector {
+    return when {
+        condition.contains("晴") -> Icons.Outlined.WbSunny
+        condition.contains("雷") -> Icons.Outlined.Thunderstorm
+        condition.contains("雨") -> Icons.Outlined.WaterDrop
+        condition.contains("云") -> Icons.Outlined.WbCloudy
+        condition.contains("雾") -> Icons.Outlined.Cloud
+        else -> Icons.Outlined.Cloud
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +92,7 @@ fun FishDetailScreen(
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(fish.imageUrl)
+                        .data(fish.imageResId) // 使用本地资源 ID
                         .crossfade(true)
                         .build(),
                     contentDescription = fish.name,
@@ -107,71 +124,31 @@ fun FishDetailScreen(
                 }
             }
 
-            // High-Contrast Red Warning Banner for Protected Species
-            if (fish.isProtected) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF0F0)),
-                    border = BorderStroke(1.5.dp, Color(0xFFE63946)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+            // Friendly Legal and Ethical Fishing Reminder
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFEDF7F6)),
+                border = BorderStroke(1.dp, Color(0xFF2A9D8F)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Legal Notice",
-                            tint = Color(0xFFE63946),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "法律禁钓警示",
-                                color = Color(0xFFE63946),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "该物种已被列入《国家重点保护野生动物名录》(${fish.protectionLevel})。根据《中华人民共和国野生动物保护法》，严禁任何形式的捕捉、捕捞和针对性垂钓。野钓误钓须小心卸钩，保持鱼体湿润，并原地无条件立即释放！",
-                                color = Color(0xFF4A1515),
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp
-                            )
-                        }
-                    }
-                }
-            } else {
-                // Friendly Legal and Ethical Fishing Reminder
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEDF7F6)),
-                    border = BorderStroke(1.dp, Color(0xFF2A9D8F)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Eco Fishing",
-                            tint = Color(0xFF2A9D8F),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "倡导文明垂钓、合理留放。幼鱼、孕鱼请放生，共护碧水微澜。",
-                            color = Color(0xFF1D5A51),
-                            fontSize = 11.sp
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = "Eco Fishing",
+                        tint = Color(0xFF2A9D8F),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "倡导文明垂钓、合理留放。幼鱼、孕鱼请放生，共护碧水微澜。",
+                        color = Color(0xFF1D5A51),
+                        fontSize = 11.sp
+                    )
                 }
             }
 
@@ -318,8 +295,8 @@ fun FishDetailScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     WeatherParamIndicator("钓点", selectedLocation.name.substringBefore(" "), Icons.Default.LocationOn)
-                                    WeatherParamIndicator("天气", weatherCondition, Icons.Default.Info)
-                                    WeatherParamIndicator("温度", weatherTemp, Icons.Default.Info)
+                                    WeatherParamIndicator("天气", weatherCondition, getWeatherIcon(weatherCondition))
+                                    WeatherParamIndicator("温度", weatherTemp, Icons.Outlined.Thermostat)
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))

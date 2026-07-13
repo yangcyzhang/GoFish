@@ -19,3 +19,5 @@ local.properties
 !.env.example
 debug.keystore
 *.jks
+/app/release/
+/app/debug/

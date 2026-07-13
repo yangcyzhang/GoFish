@@ -1,6 +1,8 @@
 package com.yangcy.gofish
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -11,6 +13,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -18,6 +25,7 @@ import com.umeng.commonsdk.UMConfigure
 import com.umeng.analytics.MobclickAgent
 import com.umeng.umcrash.UMCrash
 import com.yangcy.gofish.ui.screens.MainScreen
+import com.yangcy.gofish.ui.screens.PrivacyDialog
 import com.yangcy.gofish.ui.theme.MyApplicationTheme
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
 
@@ -38,59 +46,80 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // AMap Privacy Policy Compliance
-        try {
-            // Using BuildConfig to avoid hardcoding the API key in the source code
-            com.amap.api.maps.MapsInitializer.setApiKey(BuildConfig.AMAP_API_KEY)
-            com.amap.api.maps.MapsInitializer.updatePrivacyShow(this, true, true)
-            com.amap.api.maps.MapsInitializer.updatePrivacyAgree(this, true)
-            com.amap.api.location.AMapLocationClient.updatePrivacyShow(this, true, true)
-            com.amap.api.location.AMapLocationClient.updatePrivacyAgree(this, true)
-            
-            // Umeng Pre-Init (Compliant with privacy policy)
-            // Note: Official init should happen after user agrees to privacy policy.
-            // For now, we assume AMap privacy agree also covers Umeng or trigger both.
-            UMConfigure.preInit(this, BuildConfig.UMENG_APP_KEY, "Umeng")
-            UMConfigure.init(this, BuildConfig.UMENG_APP_KEY, "Umeng", UMConfigure.DEVICE_TYPE_PHONE, "")
-            
-            // Explicitly configure APM (Performance Monitoring)
-            // This enables Crash, ANR, and other performance data collection
-            UMCrash.init(this, BuildConfig.UMENG_APP_KEY, "Umeng")
+        val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val isPrivacyAccepted = sharedPrefs.getBoolean("privacy_accepted", false)
 
-            // Page collection mode: Manual
-            MobclickAgent.setPageCollectionMode(MobclickAgent.PageMode.LEGACY_MANUAL)
-        } catch (e: Exception) {
-            Log.e("MainActivity", "AMap Privacy Init Error", e)
+        if (isPrivacyAccepted) {
+            initSdkCompliance()
+            checkLocationPermissions()
         }
 
         enableEdgeToEdge()
 
-        // Check and request location permissions
-        checkLocationPermissions()
-        
-        // Only request WRITE_SETTINGS if we really don't have it and it's bothering us
-        // But to avoid "looping" or "blocking", let's make it more passive
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(this)) {
-            // Log it, but don't force jump every time if user keeps denying
-            Log.w("MainActivity", "Missing WRITE_SETTINGS - map might be slow")
-        }
-
         setContent {
             MyApplicationTheme {
+                var privacyAccepted by remember { mutableStateOf(isPrivacyAccepted) }
                 val viewModel: FishViewModel = viewModel()
-                MainScreen(viewModel = viewModel)
+                
+                Box {
+                    if (privacyAccepted) {
+                        MainScreen(viewModel = viewModel)
+                    } else {
+                        // Background placeholder while showing privacy dialog
+                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+                        
+                        PrivacyDialog(
+                            onConfirm = {
+                                sharedPrefs.edit().putBoolean("privacy_accepted", true).apply()
+                                initSdkCompliance()
+                                checkLocationPermissions()
+                                // Trigger initial location fix now that we have consent
+                                viewModel.triggerPreciseLocation(this@MainActivity, showToast = false)
+                                privacyAccepted = true
+                            },
+                            onDismiss = {
+                                finish()
+                            }
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    private fun initSdkCompliance() {
+        try {
+            // AMap 正式初始化 (同意隐私)
+            com.amap.api.maps.MapsInitializer.setApiKey(BuildConfig.AMAP_API_KEY)
+            com.amap.api.maps.MapsInitializer.updatePrivacyAgree(this, true)
+            com.amap.api.location.AMapLocationClient.updatePrivacyAgree(this, true)
+            
+            // 友盟正式初始化 (采集数据)
+            UMConfigure.init(this, BuildConfig.UMENG_APP_KEY, "Umeng", UMConfigure.DEVICE_TYPE_PHONE, "")
+            UMCrash.init(this, BuildConfig.UMENG_APP_KEY, "Umeng")
+            MobclickAgent.setPageCollectionMode(MobclickAgent.PageMode.LEGACY_MANUAL)
+        } catch (e: SecurityException) {
+            Log.e("MainActivity", "SecurityException during SDK init (WRITE_SETTINGS blocked by system)", e)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Compliance Init Error", e)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        MobclickAgent.onResume(this)
+        // 合规要求：未同意隐私前严禁调用此接口
+        val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        if (sharedPrefs.getBoolean("privacy_accepted", false)) {
+            MobclickAgent.onResume(this)
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        MobclickAgent.onPause(this)
+        val sharedPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        if (sharedPrefs.getBoolean("privacy_accepted", false)) {
+            MobclickAgent.onPause(this)
+        }
     }
 
     private fun checkLocationPermissions() {
