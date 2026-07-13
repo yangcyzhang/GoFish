@@ -159,7 +159,7 @@ fun FishGalleryTab(
             )
 
             // Category list row
-            val categories = listOf("全部", "钓鱼实战", "路亚运动", "生态守护")
+            val categories = listOf("全部", "钓鱼实战", "路亚运动", "海竿进阶")
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

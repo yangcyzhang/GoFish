@@ -34,7 +34,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,10 +43,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
-import com.amap.api.maps.MapView
 import com.amap.api.maps.TextureMapView
 import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.LatLng
@@ -57,7 +56,6 @@ import com.amap.api.maps.model.MyLocationStyle
 import com.yangcy.gofish.data.model.FishingSpot
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
 import com.yangcy.gofish.util.AnalyticsManager
-import com.umeng.analytics.MobclickAgent
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -153,23 +151,23 @@ private fun getResizedBitmapDescriptor(
         }
         canvas.restore()
     } else {
-        // 原有逻辑 fallback
-        val bitmap = if (drawable is BitmapDrawable) {
-            drawable.bitmap
-        } else if (drawable != null) {
-            val b = Bitmap.createBitmap(
-                drawable.intrinsicWidth.takeIf { it > 0 } ?: width,
-                drawable.intrinsicHeight.takeIf { it > 0 } ?: height,
-                Bitmap.Config.ARGB_8888
-            )
-            val c = Canvas(b)
-            drawable.setBounds(0, 0, c.width, c.height)
-            drawable.draw(c)
-            b
-        } else {
-            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        // Safe fallback logic
+        val bitmap = when {
+            drawable is BitmapDrawable && drawable.bitmap != null -> drawable.bitmap
+            drawable != null -> {
+                val b = Bitmap.createBitmap(
+                    drawable.intrinsicWidth.takeIf { it > 0 } ?: width,
+                    drawable.intrinsicHeight.takeIf { it > 0 } ?: height,
+                    Bitmap.Config.ARGB_8888
+                )
+                val c = Canvas(b)
+                drawable.setBounds(0, 0, b.width, b.height)
+                drawable.draw(c)
+                b
+            }
+            else -> Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         }
-        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888), width, height, true)
         return BitmapDescriptorFactory.fromBitmap(scaledBitmap)
     }
     
@@ -227,7 +225,7 @@ private fun drawTeardropPath(canvas: Canvas, centerX: Float, centerY: Float, rad
     
     // 计算切点角度
     // sin(theta) = radius / distance
-    val theta = Math.asin((radius / distance).toDouble()).toFloat()
+    val theta = kotlin.math.asin(radius / distance)
     val thetaDeg = Math.toDegrees(theta.toDouble()).toFloat()
     
     // 圆弧部分：从 (90 + theta) 度开始，绕一圈到 (90 - theta) 度
@@ -273,6 +271,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
     // Database State
     val spots by viewModel.fishingSpots.collectAsState()
     val selectedLocation by viewModel.selectedLocation.collectAsState()
+    val isPositioning by viewModel.isPositioning.collectAsState()
 
     // User Selection / Interactive states
     var selectedSpot by remember { mutableStateOf<FishingSpot?>(null) }
@@ -289,10 +288,44 @@ fun FishingMapScreen(viewModel: FishViewModel) {
     var showShareDialogSpot by remember { mutableStateOf<FishingSpot?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
     var selectedTempCoords by remember { mutableStateOf<LatLng?>(null) }
+    var viewDocType by remember { mutableStateOf<DocType?>(null) }
+    var detectedImportSpot by remember { mutableStateOf<FishingSpot?>(null) }
+    var lastProcessedClipText by remember { 
+        mutableStateOf(sharedPrefs.getString("last_processed_clip", "") ?: "") 
+    }
 
     // Markers management
     val markerMap = remember { mutableMapOf<Int, Marker>() }
 
+    // 优化：监听窗口焦点变化来识别剪贴板（Android 12+ 必须获得焦点后才能读取）
+    val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    LaunchedEffect(windowInfo.isWindowFocused) {
+        if (windowInfo.isWindowFocused) {
+            try {
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                if (clipboard.hasPrimaryClip()) {
+                    val clipData = clipboard.primaryClip
+                    if (clipData != null && clipData.itemCount > 0) {
+                        val text = clipData.getItemAt(0).text?.toString() ?: ""
+                        
+                        // 核心：如果当前剪贴板内容与上次处理过的内容一致，则不再重复识别
+                        if (text == lastProcessedClipText) return@LaunchedEffect
+                        
+                        if (text.contains("【爆护钓点分享】")) {
+                            val spot = parseShareCode(text)
+                            if (spot != null) {
+                                lastProcessedClipText = text
+                                sharedPrefs.edit().putString("last_processed_clip", text).apply()
+                                detectedImportSpot = spot
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FishingMapScreen", "Clipboard recognition error", e)
+            }
+        }
+    }
 
     // Lifecycle handling for MapView
     DisposableEffect(lifecycleOwner) {
@@ -544,7 +577,9 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                                 if (matchedSpot != null) {
                                     focusManager.clearFocus()
                                     isSearchFocused = false
+                                    Toast.makeText(context, "已为您定位至『${matchedSpot.name}』", Toast.LENGTH_SHORT).show()
                                     aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(matchedSpot.latitude, matchedSpot.longitude), 16f))
+                                    searchQuery = "" // 搜索成功后清空输入框
                                 } else {
                                     Toast.makeText(context, "未找到名为『$searchQuery』的钓点", Toast.LENGTH_SHORT).show()
                                 }
@@ -570,7 +605,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val categories = listOf("全部", "免费", "路亚", "黑坑", "斤塘", "野钓", "水库")
+                    val categories = listOf("全部", "手竿", "路亚", "海竿", "黑坑", "野钓", "水库")
                     items(categories) { cat ->
                         val isSelected = activeCategory == cat
                         FilterChip(
@@ -609,6 +644,27 @@ fun FishingMapScreen(viewModel: FishViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // About/Privacy Button
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.size(44.dp).clickable {
+                    if (isClickAllowed()) {
+                        viewDocType = DocType.PRIVACY_POLICY
+                    }
+                }
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "关于与隐私",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
             // Map Type Toggle Button (Amap Style: Quick Switch)
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -664,23 +720,31 @@ fun FishingMapScreen(viewModel: FishViewModel) {
             // My Location Button
             FloatingActionButton(
                 onClick = {
-                    if (isClickAllowed()) {
-                        viewModel.triggerPreciseLocation(context, showToast = false)
+                    if (isClickAllowed() && !isPositioning) {
+                        viewModel.triggerPreciseLocation(context, showToast = true)
                         // Force camera update on manual click
                         val target = LatLng(selectedLocation.lat, selectedLocation.lon)
                         aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(target, 15f))
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
+                containerColor = if (isPositioning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                contentColor = if (isPositioning) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
                 shape = CircleShape,
                 modifier = Modifier.size(54.dp).testTag("gps_center_button")
             ) {
-                Icon(
-                    imageVector = Icons.Default.LocationOn,
-                    contentDescription = "My Location",
-                    modifier = Modifier.size(26.dp)
-                )
+                if (isPositioning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "My Location",
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
             }
         }
 
@@ -815,7 +879,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "我的钓点库 (${spots.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                        Text(text = if(activeCategory == "全部") "我的钓点库 (${spots.size})" else "$activeCategory 钓点 (${filteredSpots.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                         TextButton(onClick = { showImportDialog = true }) { Icon(Icons.Default.AddCircle, null, modifier = Modifier.size(14.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("导入口令", fontSize = 12.sp) }
                         IconButton(onClick = { showSpotList = false }) { Icon(Icons.Default.Close, null, modifier = Modifier.size(20.dp)) }
                     }
@@ -829,7 +893,7 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                         }
                     } else {
                         androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                            items(spots) { spot ->
+                            items(filteredSpots) { spot ->
                                 Card(modifier = Modifier.fillMaxWidth().clickable {
                                     selectedSpot = spot
                                     selectedTempCoords = null
@@ -840,7 +904,27 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(android.graphics.Color.parseColor(spot.iconColor))))
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            Text(text = spot.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(text = spot.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    if (spot.fee.isNotEmpty()) {
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Surface(
+                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                            shape = RoundedCornerShape(4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = spot.fee,
+                                                                fontSize = 9.sp,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Text(text = spot.address, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
                                             
                                             // Action Row for Spot
                                             Row {
@@ -861,7 +945,6 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                                                 }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(16.dp)) }
                                             }
                                         }
-                                        Text(text = spot.address, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -869,6 +952,10 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                     }
                 }
             }
+        }
+
+        if (viewDocType != null) {
+            DocDetailView(type = viewDocType!!, onBack = { viewDocType = null })
         }
     }
 
@@ -878,7 +965,8 @@ fun FishingMapScreen(viewModel: FishViewModel) {
         var spotName by remember { mutableStateOf(presetNames[0]) }
         var customName by remember { mutableStateOf("") }
         var isCustomName by remember { mutableStateOf(false) }
-        
+        var spotCategory by remember { mutableStateOf("手竿") }
+
         // Dynamic address lookup for the selected coordinates
         var spotAddress by remember { mutableStateOf("获取地址中...") }
         LaunchedEffect(selectedTempCoords) {
@@ -925,6 +1013,13 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                         OutlinedTextField(value = customName, onValueChange = { customName = it }, label = { Text("输入自定义名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
 
+                    Text("选择钓点类别:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    ScrollableRowSelector(
+                        items = listOf("手竿", "路亚", "海竿", "黑坑", "野钓", "水库"),
+                        selectedItem = spotCategory,
+                        onSelect = { spotCategory = it }
+                    )
+
                     OutlinedTextField(value = spotAddress, onValueChange = { spotAddress = it }, label = { Text("详细地址 (已自动获取)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     
                     Text("标记颜色:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -956,9 +1051,9 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                             iconColor = selectedColor, 
                             iconStyle = selectedStyle, 
                             arrivalTime = arrivalTime, 
-                            fishSpecies = fishSpecies, 
+                            fishSpecies = fishSpecies,
                             bait = baitUsed, 
-                            fee = "", // Fee field repurposed or removed
+                            fee = spotCategory,
                             notes = spotNotes
                         ))
                         selectedTempCoords = null
@@ -1020,7 +1115,14 @@ fun FishingMapScreen(viewModel: FishViewModel) {
                         }
                     }
                     OutlinedTextField(value = fishSpecies, onValueChange = { fishSpecies = it }, label = { Text("目标鱼种") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = feeType, onValueChange = { feeType = it }, label = { Text("收费标准") }, modifier = Modifier.fillMaxWidth())
+                    
+                    Text("钓点类别:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    ScrollableRowSelector(
+                        items = listOf("手竿", "路亚", "海竿", "黑坑", "野钓", "水库"),
+                        selectedItem = feeType,
+                        onSelect = { feeType = it }
+                    )
+
                     OutlinedTextField(value = spotNotes, onValueChange = { spotNotes = it }, label = { Text("详细备注") }, modifier = Modifier.fillMaxWidth())
                 }
             },
@@ -1087,9 +1189,58 @@ fun FishingMapScreen(viewModel: FishViewModel) {
             confirmButton = {
                 Button(onClick = {
                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(shareCodeText))
+                    lastProcessedClipText = shareCodeText // 标记为已处理，防止自己复制后又弹窗识别
+                    sharedPrefs.edit().putString("last_processed_clip", shareCodeText).apply()
                     Toast.makeText(context, "口令已复制到剪贴板！", Toast.LENGTH_SHORT).show()
                     showShareDialogSpot = null
                 }) { Text("复制口令并关闭") }
+            }
+        )
+    }
+    // ------------------ MODAL E: AUTO-DETECTED IMPORT DIALOG ------------------
+    if (detectedImportSpot != null) {
+        val spot = detectedImportSpot!!
+        AlertDialog(
+            onDismissRequest = { detectedImportSpot = null },
+            title = { 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("识别到分享钓点", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(text = "是否导入好友分享的钓点？", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(text = spot.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(text = "类别：${spot.fee}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = "鱼种：${spot.fishSpecies}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_IMPORT_SPOT)
+                    viewModel.addFishingSpot(spot)
+                    
+                    // 导入后跳转并定位
+                    aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(spot.latitude, spot.longitude), 15f))
+                    
+                    detectedImportSpot = null
+                    Toast.makeText(context, "成功导入：${spot.name}", Toast.LENGTH_SHORT).show()
+                }) { Text("确认导入") }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    detectedImportSpot = null 
+                }) { Text("忽略") }
             }
         )
     }
@@ -1110,9 +1261,10 @@ private fun generateShareCode(spot: FishingSpot): String {
     return """
         【爆护钓点分享】
         名称：${spot.name}
+        位置：${spot.address}
         坐标：${spot.latitude},${spot.longitude}
+        钓点类别：${spot.fee}
         主攻鱼种：${spot.fishSpecies}
-        费用情况：${spot.fee}
         作钓备注：${spot.notes}
         --- 复制此段全部文字，打开爆护 App 即可一键导入钓点！ ---
     """.trimIndent()
@@ -1131,10 +1283,27 @@ private fun getIconByStyle(style: String): ImageVector {
 private fun parseShareCode(text: String): FishingSpot? {
     try {
         val name = Regex("名称[：:](.*)").find(text)?.groupValues?.get(1)?.trim() ?: ""
+        val address = Regex("位置[：:](.*)").find(text)?.groupValues?.get(1)?.trim() ?: "分享位置"
         val coords = Regex("坐标[：:]([-0-9.]+)\\s*,\\s*([-0-9.]+)").find(text) ?: return null
         val lat = coords.groupValues[1].toDoubleOrNull() ?: return null
         val lng = coords.groupValues[2].toDoubleOrNull() ?: return null
-        return FishingSpot(name = name, address = "分享坐标", latitude = lat, longitude = lng, iconColor = "#FF5722", iconStyle = "star", arrivalTime = "", fishSpecies = "", bait = "", fee = "", notes = "")
+        val category = Regex("钓点类别[：:](.*)").find(text)?.groupValues?.get(1)?.trim() ?: "手竿"
+        val species = Regex("主攻鱼种[：:](.*)").find(text)?.groupValues?.get(1)?.trim() ?: ""
+        val notes = Regex("作钓备注[：:](.*)").find(text)?.groupValues?.get(1)?.trim() ?: ""
+        
+        return FishingSpot(
+            name = name, 
+            address = address,
+            latitude = lat, 
+            longitude = lng, 
+            iconColor = "#00ADB5", 
+            iconStyle = "pin", 
+            arrivalTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date()), 
+            fishSpecies = species, 
+            bait = "", 
+            fee = category, 
+            notes = notes
+        )
     } catch (e: Exception) { return null }
 }
 

@@ -43,13 +43,25 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CatchRepository(db.catchLogDao())
     private val fishingSpotRepository = FishingSpotRepository(db.fishingSpotDao())
 
-    // AMap Location Client
-    private val locationClient = AMapLocationClient(application)
+    // AMap Location Client - Initialized on demand after privacy agreement
+    private var locationClient: AMapLocationClient? = null
     private val locationOption = AMapLocationClientOption().apply {
         locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
         isOnceLocation = true
         isOnceLocationLatest = true
         isMockEnable = true // For emulator testing if needed
+    }
+
+    private fun getSafeLocationClient(): AMapLocationClient? {
+        if (locationClient == null) {
+            try {
+                // AMap requires updatePrivacyAgree(context, true) before this constructor
+                locationClient = AMapLocationClient(getApplication())
+            } catch (e: Exception) {
+                Log.e("FishViewModel", "Failed to init AMapLocationClient", e)
+            }
+        }
+        return locationClient
     }
 
     // Catch Logs State
@@ -68,27 +80,40 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Default fallback coordinates (Hangzhou, close to our map center)
+    // Default fallback coordinates (Shenzhen Xili Reservoir area)
     val defaultLocation = FishingLocation(
-        name = "西湖区金沙水域",
-        province = "浙江",
-        lat = 30.2742,
-        lon = 120.1551,
+        name = "南山区西丽水域",
+        province = "广东",
+        lat = 22.5976,
+        lon = 113.9576,
         prominentSpecies = listOf("crucian_carp", "culter", "largemouth_bass"),
-        description = "默认高精度定位。东经120.1551°，北纬30.2742°。附近最适合垂钓的水域为西湖区金沙水库，此处水草丰茂，深受钓友喜爱。"
+        description = "默认高精度定位。东经113.9576°，北纬22.5976°。附近最适合垂钓的水域为南山区西丽水库，此处环境优美，是深圳资深钓友的常去之地。"
     )
 
     private val _isPositioning = MutableStateFlow(false)
     val isPositioning = _isPositioning.asStateFlow()
+    
+    private var lastLocationRequestTime = 0L
+    private val LOCATION_COOLDOWN_MS = 5000L // 5秒冷却时间
 
     fun triggerPreciseLocation(context: android.content.Context, showToast: Boolean = true, updateSelectedLocation: Boolean = true) {
         if (_isPositioning.value) return
+        
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastLocationRequestTime < LOCATION_COOLDOWN_MS) {
+            if (showToast) {
+                Toast.makeText(context, "请求过于频繁，请稍后再试", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        
         _isPositioning.value = true
+        lastLocationRequestTime = currentTime
         
         viewModelScope.launch {
             try {
-                var lat = 30.27415
-                var lon = 120.15515
+                var lat = 22.5431
+                var lon = 114.0579
                 var hasGps = false
 
                 // Use AMap Native Location for maximum precision and speed in China
@@ -147,43 +172,40 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun suspendRefLoc(): com.amap.api.location.AMapLocation? = suspendCancellableCoroutine { continuation ->
-        locationClient.setLocationOption(locationOption)
-        locationClient.setLocationListener { amapLocation ->
+        val client = getSafeLocationClient()
+        if (client == null) {
+            continuation.resume(null)
+            return@suspendCancellableCoroutine
+        }
+        client.setLocationOption(locationOption)
+        client.setLocationListener { amapLocation ->
             if (continuation.isActive) {
-                locationClient.stopLocation()
+                client.stopLocation()
                 continuation.resume(amapLocation)
             }
         }
-        locationClient.startLocation()
+        client.startLocation()
         
         continuation.invokeOnCancellation {
-            locationClient.stopLocation()
+            client.stopLocation()
         }
     }
 
     private fun findNearestWaterBody(context: android.content.Context, lat: Double, lon: Double): String {
-        var district = "本地"
+        var locationName = "当前位置"
         try {
             val geocoder = android.location.Geocoder(context, java.util.Locale.CHINA)
             val addresses = geocoder.getFromLocation(lat, lon, 1)
             if (!addresses.isNullOrEmpty()) {
                 val addr = addresses[0]
-                district = addr.subLocality ?: addr.locality ?: addr.adminArea ?: "本地"
+                // 尝试获取更精确的特征点名称 (featureName) 或 街道/门牌号 (thoroughfare)
+                locationName = addr.featureName ?: addr.thoroughfare ?: addr.subLocality ?: addr.locality ?: "当前位置"
             }
         } catch (e: Exception) {
             Log.e("FishViewModel", "Geocoder error", e)
         }
         
-        // Suffix of nearby water body types
-        val waterSuffixes = listOf("水库", "生态湖", "野钓公园", "河道水域")
-        val waterNames = listOf("白马", "闲林", "青山", "金沙", "九溪", "长河", "西溪", "余杭", "萧山", "钱江", "富春")
-        
-        // Combine them deterministically based on coordinates, or beautifully semi-randomized
-        val index = (Math.abs(lat * 1000).toInt() + Math.abs(lon * 1000).toInt())
-        val name = waterNames[index % waterNames.size]
-        val suffix = waterSuffixes[index % waterSuffixes.size]
-        
-        return "$district$name$suffix"
+        return locationName
     }
 
     private val _searchQuery = MutableStateFlow("")
@@ -198,21 +220,15 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
     // Combined filtered fish list
     val filteredFishList: StateFlow<List<Fish>> = combine(
         _searchQuery,
-        _selectedFilter,
-        _selectedLocation
-    ) { query, filter, location ->
+        _selectedFilter
+    ) { query, filter ->
         var list = FishData.fishList
-
-        // Filter by location prominence (optional context tag)
-        if (filter == "本地热门") {
-            list = list.filter { fish -> location.prominentSpecies.contains(fish.id) }
-        }
 
         // Filter by specific types
         list = when (filter) {
-            "路亚鱼种" -> list.filter { it.anglingStrategy.contains("路亚") }
-            "手竿鱼种" -> list.filter { it.rodRecommendation.contains("手竿") }
-            "保护物种" -> list.filter { it.isProtected }
+            "路亚鱼种" -> list.filter { it.category == "路亚" }
+            "手竿鱼种" -> list.filter { it.category == "手竿" }
+            "海竿鱼种" -> list.filter { it.category == "海竿" }
             else -> list
         }
 
@@ -251,7 +267,12 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Initial weather load
         fetchWeatherForLocation(_selectedLocation.value)
-        triggerPreciseLocation(application, showToast = false, updateSelectedLocation = true)
+        
+        // Safety: Only trigger positioning if privacy was already accepted in a previous session
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        if (sharedPrefs.getBoolean("privacy_accepted", false)) {
+            triggerPreciseLocation(application, showToast = false, updateSelectedLocation = true)
+        }
     }
 
     fun updateSearchQuery(query: String) {
@@ -312,9 +333,6 @@ class FishViewModel(application: Application) : AndroidViewModel(application) {
         val cond = _weatherCondition.value
 
         return when {
-            fish.isProtected -> {
-                "【禁钓提醒】该鱼种属于受保护物种，当前在${_selectedLocation.value.name}属于禁止垂钓鱼类。请遵守法规，若不慎钓获请立即在水边轻柔释放。"
-            }
             tempVal < 15.0 -> {
                 "【低温钓况分析】当前温度低（${_weatherTemp.value}），鱼口偏轻活性弱。建议减细线组（如子线降至0.4号），使用极高蛋白质饵料（如红虫或浓腥型），并死守深水底层或背风阳角。"
             }

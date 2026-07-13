@@ -285,13 +285,16 @@ fun AddCatchDialog(
     val selectedLocation by viewModel.selectedLocation.collectAsState()
 
     var fishName by remember { mutableStateOf("鲫鱼") }
+    var isCustomFish by remember { mutableStateOf(false) }
+    var customFishName by remember { mutableStateOf("") }
+    
     var locationInput by remember { mutableStateOf(selectedLocation.name.substringBefore(" ")) }
     var weightInput by remember { mutableStateOf("0.5") }
     var lengthInput by remember { mutableStateOf("22") }
     var baitInput by remember { mutableStateOf("红虫") }
     var notesInput by remember { mutableStateOf("") }
 
-    val fishPresets = listOf("鲫鱼", "草鱼", "大口黑鲈", "翘嘴", "鳜鱼", "鲤鱼", "鲶鱼", "黑鱼")
+    val fishPresets = listOf("鲫鱼", "黄脚立", "草鱼","石九公","罗非", "翘嘴","石斑","鳜鱼", "鲤鱼", "鲶鱼", "黑鱼")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -300,10 +303,11 @@ fun AddCatchDialog(
             Button(
                 onClick = {
                     AnalyticsManager.trackEvent(context, AnalyticsManager.EVENT_ADD_CATCH)
+                    val finalFishName = if (isCustomFish) customFishName else fishName
                     val weight = weightInput.toDoubleOrNull() ?: 0.5
                     val length = lengthInput.toDoubleOrNull() ?: 20.0
                     viewModel.addCatchLog(
-                        fishName = fishName,
+                        fishName = finalFishName,
                         location = locationInput,
                         weight = weight,
                         length = length,
@@ -313,7 +317,7 @@ fun AddCatchDialog(
                     onDismiss()
                 }
             ) {
-                Text("保存日志")
+                Text("保存日记")
             }
         },
         dismissButton = {
@@ -338,10 +342,32 @@ fun AddCatchDialog(
                 // Dropdown mock for Fish Name selection
                 Text("选择或输入鱼种:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 ScrollableRowSelector(
-                    items = fishPresets,
-                    selectedItem = fishName,
-                    onSelect = { fishName = it }
+                    items = fishPresets + "自定义",
+                    selectedItem = if (isCustomFish) "自定义" else fishName,
+                    onSelect = { 
+                        if (it == "自定义") {
+                            isCustomFish = true
+                        } else {
+                            isCustomFish = false
+                            fishName = it
+                        }
+                    }
                 )
+
+                if (isCustomFish) {
+                    OutlinedTextField(
+                        value = customFishName,
+                        onValueChange = { customFishName = it },
+                        label = { Text("输入自定义鱼种") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 OutlinedTextField(
                     value = locationInput,

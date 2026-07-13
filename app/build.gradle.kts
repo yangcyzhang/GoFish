@@ -18,9 +18,9 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    // 2. ABI 过滤：只保留主流的手机架构，移除 x86 等模拟器架构
+    // 2. ABI 过滤：只保留主流的手机架构，完全移除 x86 等模拟器架构减小体积
     ndk {
-      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+      abiFilters += listOf("arm64-v8a")
     }
   }
 
@@ -55,6 +55,12 @@ android {
       isShrinkResources = true // 开启资源缩减：自动删除未使用的图片、布局等
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
+      
+      // 开启 R8 进阶优化
+      setProguardFiles(listOf(
+          getDefaultProguardFile("proguard-android-optimize.txt"),
+          "proguard-rules.pro"
+      ))
     }
     debug {
       val localDebugKeystore = file("${rootDir}/debug.keystore")
@@ -92,6 +98,7 @@ dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
+  implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
