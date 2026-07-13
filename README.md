@@ -15,6 +15,16 @@ GoFish 是一款专为垂钓爱好者设计的 Android 应用，结合了高德�
 - **渔获记录日记**: 结构化记录每一次垂钓过程，记录位置、用饵及心得。
 - **科学气象建议**: 结合实时气象数据，针对不同天气提供即时的垂钓策略建议。
 
+### 界面预览
+
+| 智能地图 (Smart Map) | 鱼类图鉴 (Encyclopedia) | 鱼类详情 (Details) | 渔获日记 (Catch Log) |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/map.jpg" width="200" /> | <img src="docs/screenshots/fish_list.jpg" width="200" /> | <img src="docs/screenshots/fish_detail.jpg" width="200" /> | <img src="docs/screenshots/log.jpg" width="200" /> |
+
+#### 演示视频
+> [!TIP]
+> [点击此处观看功能演示视频](docs/video/demo.mp4)
+
 ### 技术栈
 
 - **开发语言**: Kotlin
@@ -47,6 +57,16 @@ GoFish is a professional Android application designed for angling enthusiasts. B
 - **Tactical Fish Encyclopedia**: Comprehensive reference for various species, covering habits, habitats, specific angling strategies (Lure/Bait), and conservation status.
 - **Catch Log & Diary**: A structured logging system to archive your successes, including locations, bait used, and personal reflections.
 - **Scientific Weather Insights**: Leverages real-time weather data to provide instant tactical advice based on current conditions.
+
+### UI Preview
+
+| Map View | Fish List | Fish Details | Fishing Diary |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/map.jpg" width="200" /> | <img src="docs/screenshots/fish_list.jpg" width="200" /> | <img src="docs/screenshots/fish_detail.jpg" width="200" /> | <img src="docs/screenshots/log.jpg" width="200" /> |
+
+#### Demo Video
+> [!IMPORTANT]
+> [Watch the Full Demo Video Here](docs/video/demo.mp4)
 
 ### Tech Stack
 
