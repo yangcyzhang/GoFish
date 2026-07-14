@@ -1,9 +1,0 @@
-com.yangcy.gofish.app-pngs-0 /Users/edison/AndroidStudioProjects/gofish/app/build/generated/res/pngs/release
-com.yangcy.gofish.app-updated_navigation_xml-1 /Users/edison/AndroidStudioProjects/gofish/app/build/generated/updated_navigation_xml/release
-com.yangcy.gofish.app-packageReleaseResources-2 /Users/edison/AndroidStudioProjects/gofish/app/build/intermediates/incremental/release/packageReleaseResources/merged.dir
-com.yangcy.gofish.app-packageReleaseResources-3 /Users/edison/AndroidStudioProjects/gofish/app/build/intermediates/incremental/release/packageReleaseResources/stripped.dir
-com.yangcy.gofish.app-merged-not-compiled-resources-4 /Users/edison/AndroidStudioProjects/gofish/app/build/intermediates/merged-not-compiled-resources/release
-com.yangcy.gofish.app-release-5 /Users/edison/AndroidStudioProjects/gofish/app/build/intermediates/merged_res/release/mergeReleaseResources
-com.yangcy.gofish.app-main-6 /Users/edison/AndroidStudioProjects/gofish/app/src/main/res
-com.yangcy.gofish.app-release-7 /Users/edison/AndroidStudioProjects/gofish/app/src/release/res
-gradleHome-0 /Users/edison/.gradle
