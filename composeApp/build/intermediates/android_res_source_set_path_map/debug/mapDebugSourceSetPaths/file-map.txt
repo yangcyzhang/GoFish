@@ -1,0 +1,10 @@
+com.yangcy.gofish.composeApp-pngs-0 /Users/edison/AndroidStudioProjects/gofish/composeApp/build/generated/res/pngs/debug
+com.yangcy.gofish.composeApp-updated_navigation_xml-1 /Users/edison/AndroidStudioProjects/gofish/composeApp/build/generated/updated_navigation_xml/debug
+com.yangcy.gofish.composeApp-packageDebugResources-2 /Users/edison/AndroidStudioProjects/gofish/composeApp/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.yangcy.gofish.composeApp-packageDebugResources-3 /Users/edison/AndroidStudioProjects/gofish/composeApp/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.yangcy.gofish.composeApp-debug-4 /Users/edison/AndroidStudioProjects/gofish/composeApp/build/intermediates/merged_res/debug/mergeDebugResources
+com.yangcy.gofish.composeApp-androidDebug-5 /Users/edison/AndroidStudioProjects/gofish/composeApp/src/androidDebug/res
+com.yangcy.gofish.composeApp-androidMain-6 /Users/edison/AndroidStudioProjects/gofish/composeApp/src/androidMain/res
+com.yangcy.gofish.composeApp-debug-7 /Users/edison/AndroidStudioProjects/gofish/composeApp/src/debug/res
+com.yangcy.gofish.composeApp-main-8 /Users/edison/AndroidStudioProjects/gofish/composeApp/src/main/res
+gradleHome-0 /Users/edison/.gradle
