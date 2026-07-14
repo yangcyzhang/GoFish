@@ -2,7 +2,6 @@ package com.yangcy.gofish.ui.screens
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.*
@@ -57,8 +56,6 @@ import com.yangcy.gofish.util.showToast
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import gofish.composeapp.generated.resources.Res
-import gofish.composeapp.generated.resources.ic_launcher_foreground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,7 +100,6 @@ actual fun FishingMapScreen(viewModel: FishViewModel) {
     var showAddSpotDialog by remember { mutableStateOf(false) }
     var spotToDelete by remember { mutableStateOf<FishingSpot?>(null) }
     var showEditSpotDialog by remember { mutableStateOf(false) }
-    var showShareDialogSpot by remember { mutableStateOf<FishingSpot?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
     var selectedTempCoords by remember { mutableStateOf<LatLng?>(null) }
     var viewDocType by remember { mutableStateOf<DocType?>(null) }
@@ -115,7 +111,7 @@ actual fun FishingMapScreen(viewModel: FishViewModel) {
     // Markers management
     val markerMap = remember { mutableMapOf<Int, Marker>() }
 
-    // 剪贴板识别 (Clipboard Recognition)
+    // 剪贴板识别
     val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
     LaunchedEffect(windowInfo.isWindowFocused) {
         if (windowInfo.isWindowFocused) {
@@ -370,7 +366,7 @@ actual fun FishingMapScreen(viewModel: FishViewModel) {
             Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp).shadow(12.dp, RoundedCornerShape(20.dp)), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("选定钓点经纬度坐标", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("经度: ${String.format("%.4f", coords.longitude)}°E   纬度: ${String.format("%.4f", coords.latitude)}°N", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("经度: ${String.format(Locale.CHINA, "%.4f", coords.longitude)}°E   纬度: ${String.format(Locale.CHINA, "%.4f", coords.latitude)}°N", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = { selectedTempCoords = null }, modifier = Modifier.weight(1f)) { Text("取消选择") }
@@ -443,7 +439,7 @@ actual fun FishingMapScreen(viewModel: FishViewModel) {
 
     // Dialogs
     if (showAddSpotDialog && selectedTempCoords != null) {
-        AddSpotDialog(context, selectedTempCoords!!, onDismiss = { showAddSpotDialog = false }, onSave = { viewModel.addFishingSpot(it) })
+        AddSpotDialog(selectedTempCoords!!, onDismiss = { showAddSpotDialog = false }, onSave = { viewModel.addFishingSpot(it) })
     }
     if (showEditSpotDialog && selectedSpot != null) {
         EditSpotDialog(selectedSpot!!, onDismiss = { showEditSpotDialog = false }, onSave = { viewModel.addFishingSpot(it) })
@@ -455,6 +451,15 @@ actual fun FishingMapScreen(viewModel: FishViewModel) {
             sharedPrefs.edit().putString("last_processed_clip", rawText).apply()
             showToast("导入成功")
         })
+    }
+    if (spotToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { spotToDelete = null },
+            title = { Text("确认删除") },
+            text = { Text("确定要删除钓点『${spotToDelete!!.name}』吗？") },
+            confirmButton = { Button(onClick = { viewModel.deleteFishingSpot(spotToDelete!!); spotToDelete = null; showToast("已删除") }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { spotToDelete = null }) { Text("取消") } }
+        )
     }
     if (detectedImportSpot != null) {
         AlertDialog(onDismissRequest = { detectedImportSpot = null }, title = { Text("识别到分享钓点") }, text = { Text("是否导入好友分享的钓点『${detectedImportSpot!!.name}』？") }, confirmButton = { Button(onClick = { viewModel.addFishingSpot(detectedImportSpot!!); aMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(detectedImportSpot!!.latitude, detectedImportSpot!!.longitude), 15f)); detectedImportSpot = null }) { Text("确认导入") } }, dismissButton = { TextButton(onClick = { detectedImportSpot = null }) { Text("忽略") } })
@@ -470,7 +475,7 @@ fun MapControlButton(icon: ImageVector, onClick: () -> Unit) {
 
 // Dialog Components
 @Composable
-fun AddSpotDialog(context: android.content.Context, coords: LatLng, onDismiss: () -> Unit, onSave: (FishingSpot) -> Unit) {
+fun AddSpotDialog(coords: LatLng, onDismiss: () -> Unit, onSave: (FishingSpot) -> Unit) {
     var name by remember { mutableStateOf("") }
     var species by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("标记新钓点") }, text = { Column { OutlinedTextField(name, {name=it}, label = {Text("名称")}); OutlinedTextField(species, {species=it}, label = {Text("鱼种")}) } }, confirmButton = { Button(onClick = { onSave(FishingSpot(name=name, address="坐标位置", latitude=coords.latitude, longitude=coords.longitude, iconColor="#00ADB5", iconStyle="pin", arrivalTime="", fishSpecies=species, bait="", fee="手竿", notes="")); onDismiss() }) { Text("保存") } })
