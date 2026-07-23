@@ -16,9 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -26,13 +24,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yangcy.gofish.data.model.CatchLog
-import com.yangcy.gofish.data.model.FishData
 import com.yangcy.gofish.ui.viewmodel.FishViewModel
-import com.yangcy.gofish.ui.viewmodel.getTimeMillis
+import com.yangcy.gofish.ui.viewmodel.formatDecimal
+import com.yangcy.gofish.ui.viewmodel.formatTimestamp
 import com.yangcy.gofish.util.analytics
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun CatchHistoryTab(
@@ -52,11 +47,11 @@ fun CatchHistoryTab(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Stats Summary Dashboard - Stretched to full width
+        // Stats Summary Dashboard
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            shape = RoundedCornerShape(0.dp), // Squared to bleed into edges
+            shape = RoundedCornerShape(0.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -79,7 +74,7 @@ fun CatchHistoryTab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     StatBox("起鱼总数", "$totalCatches 尾")
-                    StatBox("最大渔获", "${String.format(Locale.getDefault(), "%.1f", maxWeight)} kg")
+                    StatBox("最大渔获", "${formatDecimal(maxWeight)} kg")
                     StatBox("黄金用饵", favoriteBait)
                 }
             }
@@ -135,13 +130,6 @@ fun CatchHistoryTab(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
-                    Text(
-                        text = "点击右上角“记一笔”添加你的第一条钓鱼日志吧！",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp)
-                    )
                 }
             }
         } else {
@@ -152,12 +140,12 @@ fun CatchHistoryTab(
                     .fillMaxSize()
                     .weight(1f)
             ) {
-                    items(catches) { log ->
-                        CatchLogItem(log = log, onDelete = { 
-                            analytics.trackEvent("delete_catch_log")
-                            viewModel.deleteCatchLog(log) 
-                        })
-                    }
+                items(catches) { log ->
+                    CatchLogItem(log = log, onDelete = { 
+                        analytics.trackEvent("delete_catch_log")
+                        viewModel.deleteCatchLog(log) 
+                    })
+                }
             }
         }
     }
@@ -166,8 +154,7 @@ fun CatchHistoryTab(
 @Composable
 fun CatchLogItem(log: CatchLog, onDelete: () -> Unit) {
     val dateStr = remember(log.timestamp) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        sdf.format(Date(log.timestamp))
+        formatTimestamp(log.timestamp)
     }
 
     Card(
@@ -338,7 +325,6 @@ fun AddCatchDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Dropdown mock for Fish Name selection
                 Text("选择或输入鱼种:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 ScrollableRowSelector(
                     items = fishPresets + "自定义",
@@ -360,10 +346,6 @@ fun AddCatchDialog(
                         label = { Text("输入自定义鱼种") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -374,10 +356,6 @@ fun AddCatchDialog(
                     label = { Text("作钓水域/地点") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -392,10 +370,6 @@ fun AddCatchDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
                         modifier = Modifier.weight(1f)
                     )
 
@@ -406,10 +380,6 @@ fun AddCatchDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -420,10 +390,6 @@ fun AddCatchDialog(
                     label = { Text("作钓用饵") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -433,10 +399,6 @@ fun AddCatchDialog(
                     label = { Text("作钓心得/日记备注") },
                     maxLines = 3,
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }

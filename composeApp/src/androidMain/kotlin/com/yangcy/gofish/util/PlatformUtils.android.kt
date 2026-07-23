@@ -20,3 +20,24 @@ actual val analytics: AnalyticsProvider = object : AnalyticsProvider {
         AnalyticsManager.onPageEnd(pageName)
     }
 }
+
+actual fun openMapNavigation(lat: Double, lon: Double, name: String) {
+    try {
+        val uri = android.net.Uri.parse("androidamap://navi?sourceApplication=GoFish&lat=$lat&lon=$lon&dev=0&style=2")
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri).apply {
+            setPackage("com.autonavi.minimap")
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (intent.resolveActivity(appContext.packageManager) != null) {
+            appContext.startActivity(intent)
+        } else {
+            val geoUri = android.net.Uri.parse("geo:$lat,$lon?q=$lat,$lon($name)")
+            val fallbackIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri).apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(fallbackIntent)
+        }
+    } catch (e: Exception) {
+        showToast("无法调起地图导航")
+    }
+}

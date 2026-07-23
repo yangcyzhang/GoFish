@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 
 data class FishingLocation(
     val name: String,
@@ -218,7 +219,7 @@ class FishViewModel(
     }
 
     fun addCatchLog(fishName: String, location: String, weight: Double, length: Double, bait: String, notes: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             val newLog = CatchLog(
                 fishName = fishName,
                 location = location,
@@ -235,17 +236,30 @@ class FishViewModel(
     }
 
     fun deleteCatchLog(log: CatchLog) {
-        viewModelScope.launch { catchRepository.delete(log) }
+        viewModelScope.launch(Dispatchers.Default) { catchRepository.delete(log) }
     }
 
     fun addFishingSpot(spot: FishingSpot) {
-        viewModelScope.launch { fishingSpotRepository.insert(spot) }
+        viewModelScope.launch(Dispatchers.Default) { fishingSpotRepository.insert(spot) }
     }
 
     fun deleteFishingSpot(spot: FishingSpot) {
-        viewModelScope.launch { fishingSpotRepository.delete(spot) }
+        viewModelScope.launch(Dispatchers.Default) { fishingSpotRepository.delete(spot) }
+    }
+
+    /**
+     * 根据经纬度获取详细地址名称
+     */
+    suspend fun getAddressFromLocation(lat: Double, lon: Double): String {
+        return try {
+            locationProvider?.getAddressFromLocation(lat, lon) ?: "未知地点"
+        } catch (e: Exception) {
+            "地址解析失败"
+        }
     }
 }
 
-// Expect fun for getting time
+// Expect funs for time
 expect fun getTimeMillis(): Long
+expect fun formatTimestamp(timestamp: Long): String
+expect fun formatDecimal(value: Double): String

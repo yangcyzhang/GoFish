@@ -9,3 +9,5 @@ interface AnalyticsProvider {
 }
 
 expect val analytics: AnalyticsProvider
+
+expect fun openMapNavigation(lat: Double, lon: Double, name: String)

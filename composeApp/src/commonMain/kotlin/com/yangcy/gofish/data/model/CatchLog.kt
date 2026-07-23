@@ -2,13 +2,14 @@ package com.yangcy.gofish.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.yangcy.gofish.ui.viewmodel.getTimeMillis
 
 @Entity(tableName = "catch_logs")
 data class CatchLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val fishName: String,
     val location: String,
-    val timestamp: Long = System.currentTimeMillis(),
+    val timestamp: Long = getTimeMillis(),
     val weatherCondition: String = "晴朗",
     val temperature: String = "25°C",
     val weightKg: Double = 0.5, // kilograms
