@@ -79,7 +79,8 @@ fun MainScreen(viewModel: FishViewModel) {
                         val tabs = listOf(
                             Triple("钓点地图", Icons.Default.LocationOn, 0),
                             Triple("鱼类图鉴", Icons.Default.Home, 1),
-                            Triple("渔获日记", Icons.Default.List, 2)
+                            Triple("渔获日记", Icons.Default.List, 2),
+                            Triple("钓鱼工具", Icons.Default.Widgets, 3)
                         )
                         tabs.forEach { (label, filledIcon, index) ->
                             val isSelected = currentTab == index
@@ -116,6 +117,7 @@ fun MainScreen(viewModel: FishViewModel) {
                         0 -> FishingMapScreen(viewModel = viewModel)
                         1 -> FishCatalogTab(viewModel = viewModel, onFishClick = { selectedFish = it })
                         2 -> CatchHistoryTab(viewModel = viewModel, onAddClick = { showAddCatchDialog = true })
+                        3 -> AnglerToolboxScreen()
                     }
 
                     if (showAddCatchDialog) {
